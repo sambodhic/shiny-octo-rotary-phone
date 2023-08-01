@@ -17,6 +17,9 @@ provider "azurerm" {
   features {}
 }
 
+provider "azapi" {
+}
+
 resource "azurerm_resource_group" "kai-rg" {
   name     = "kai-resources"
   location = "West US 3"
@@ -76,13 +79,26 @@ resource "azapi_resource" "kai-app" {
   name      = "kai-app"
 
   body = jsonencode({
-    properties : {
+    properties = {
       managedEnvironmentId = azapi_resource.kai-aca.id
       configuration = {
         ingress = {
           external   = true
           targetPort = 80
         }
+        # registries = [
+        #   {
+        #     server : "kaidev.azurecr.io"
+        #     username : containerRegistryUsername
+        #     passwordSecretRef : "container-registry-password"
+        #   }
+        # ]
+        # secrets = [
+        #   {
+        #     name : "container-registry-password"
+        #     value : "[parameters('container-registry-password')]"
+        #   }
+        # ]
       }
       template = {
         containers = [
@@ -91,9 +107,17 @@ resource "azapi_resource" "kai-app" {
             image = "nginx"
             resources = {
               cpu    = 0.25
-              memory = "0.25Gi"
+              memory = "0.5Gi"
             }
-          }
+          },
+          # {
+          #   name  = "app"
+          #   image = "kaidev.azurecr.io/app:latest"
+          #   resources = {
+          #     cpu    = 0.25
+          #     memory = "0.5Gi"
+          #   }
+          # }
         ]
         scale = {
           minReplicas = 1
