@@ -86,19 +86,19 @@ resource "azapi_resource" "kai-app" {
           external   = true
           targetPort = 80
         }
-        # registries = [
-        #   {
-        #     server : "kaidev.azurecr.io"
-        #     username : containerRegistryUsername
-        #     passwordSecretRef : "container-registry-password"
-        #   }
-        # ]
-        # secrets = [
-        #   {
-        #     name : "container-registry-password"
-        #     value : "[parameters('container-registry-password')]"
-        #   }
-        # ]
+        registries = [
+          {
+            server : "kaidev.azurecr.io"
+            username : "kaidev"
+            passwordSecretRef : "registry-password"
+          }
+        ]
+        secrets = [
+          {
+            name : "registry-password"
+            value : "OleHvQ1F9Hgy9sgIRhnEnNZIp1KhhfGTvuamu/CgZ0+ACRAmL7kn"
+          }
+        ]
       }
       template = {
         containers = [
@@ -110,6 +110,7 @@ resource "azapi_resource" "kai-app" {
               memory = "0.5Gi"
             }
           },
+          # Only run it after kaidev.azurecr.io/app is deployed
           # {
           #   name  = "app"
           #   image = "kaidev.azurecr.io/app:latest"
