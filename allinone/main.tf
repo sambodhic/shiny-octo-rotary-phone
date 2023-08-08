@@ -28,6 +28,22 @@ resource "azurerm_resource_group" "rg" {
   }
 }
 
+resource "azurerm_container_registry" "acr" {
+  name                = "kaidev"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "Basic"
+  admin_enabled       = true
+}
+
+resource "azurerm_log_analytics_workspace" "law" {
+  name                = "kaiLaw"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
 resource "azurerm_virtual_network" "vnet" {
   name                = "kaiVNet"
   resource_group_name = azurerm_resource_group.rg.name
@@ -157,12 +173,12 @@ resource "azurerm_application_gateway" "main" {
 
 resource "azurerm_network_interface" "nic" {
   count               = 2
-  name                = "nic-${count.index+1}"
+  name                = "nic-${count.index + 1}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
-    name                          = "nic-ipconfig-${count.index+1}"
+    name                          = "nic-ipconfig-${count.index + 1}"
     subnet_id                     = azurerm_subnet.backend.id
     private_ip_address_allocation = "Dynamic"
   }
@@ -171,7 +187,7 @@ resource "azurerm_network_interface" "nic" {
 resource "azurerm_network_interface_application_gateway_backend_address_pool_association" "nic-assoc" {
   count                   = 2
   network_interface_id    = azurerm_network_interface.nic[count.index].id
-  ip_configuration_name   = "nic-ipconfig-${count.index+1}"
+  ip_configuration_name   = "nic-ipconfig-${count.index + 1}"
   backend_address_pool_id = one(azurerm_application_gateway.main.backend_address_pool).id
 }
 
@@ -185,7 +201,7 @@ resource "random_password" "password" {
 
 resource "azurerm_windows_virtual_machine" "vm" {
   count               = 2
-  name                = "kaiVM${count.index+1}"
+  name                = "kaiVM${count.index + 1}"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   size                = "Standard_DS1_v2"
@@ -212,7 +228,7 @@ resource "azurerm_windows_virtual_machine" "vm" {
 
 resource "azurerm_virtual_machine_extension" "vm-extensions" {
   count                = 2
-  name                 = "vm${count.index+1}-ext"
+  name                 = "vm${count.index + 1}-ext"
   virtual_machine_id   = azurerm_windows_virtual_machine.vm[count.index].id
   publisher            = "Microsoft.Compute"
   type                 = "CustomScriptExtension"
@@ -223,6 +239,84 @@ resource "azurerm_virtual_machine_extension" "vm-extensions" {
         "commandToExecute": "powershell Add-WindowsFeature Web-Server; powershell Add-Content -Path \"C:\\inetpub\\wwwroot\\Default.htm\" -Value $($env:computername)"
     }
 SETTINGS
+}
+
+# creating aca environment
+resource "azapi_resource" "aca" {
+  type      = "Microsoft.App/managedEnvironments@2022-03-01"
+  name      = "kaiAca"
+  parent_id = azurerm_resource_group.rg.id
+  location  = azurerm_resource_group.rg.location
+
+  body = jsonencode({
+    properties = {
+      appLogsConfiguration = {
+        destination = "log-analytics"
+        logAnalyticsConfiguration = {
+          customerId = azurerm_log_analytics_workspace.law.workspace_id
+          sharedKey  = azurerm_log_analytics_workspace.law.primary_shared_key
+        }
+      }
+    }
+  })
+}
+
+# creating the aca app
+resource "azapi_resource" "app" {
+  type      = "Microsoft.App/containerApps@2022-03-01"
+  name      = "kai-app"
+  parent_id = azurerm_resource_group.rg.id
+  location  = azurerm_resource_group.rg.location
+
+  body = jsonencode({
+    properties = {
+      managedEnvironmentId = azapi_resource.aca.id
+      configuration = {
+        ingress = {
+          external   = true
+          targetPort = 80
+        }
+        registries = [
+          {
+            server : "kaidev.azurecr.io"
+            username : "kaidev"
+            passwordSecretRef : "registry-password"
+          }
+        ]
+        secrets = [
+          {
+            name : "registry-password"
+            value : azurerm_container_registry.acr.admin_password
+          }
+        ]
+      }
+      template = {
+        containers = [
+          {
+            name  = "web"
+            image = "nginx"
+            resources = {
+              cpu    = 0.25
+              memory = "0.5Gi"
+            }
+          },
+          # Only run it after kaidev.azurecr.io/app is deployed
+          #   {
+          #     name  = "app"
+          #     image = "kaidev.azurecr.io/app:latest"
+          #     resources = {
+          #       cpu    = 0.25
+          #       memory = "0.5Gi"
+          #     }
+          #   }
+        ]
+        scale = {
+          minReplicas = 1
+          maxReplicas = 1
+        }
+      }
+    }
+  })
 }
 
 resource "azurerm_private_dns_zone" "database" {

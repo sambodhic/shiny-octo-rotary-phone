@@ -11,12 +11,7 @@ output "azurerm_postgresql_flexible_server" {
 }
 
 output "postgresql_flexible_server_database_name" {
-  value = azurerm_postgresql_flexible_server.database.name
-}
-
-output "postgresql_flexible_server_admin_password" {
-  sensitive = true
-  value     = azurerm_postgresql_flexible_server.database.administrator_password
+  value = azurerm_postgresql_flexible_server_database.database.name
 }
 
 output "batch_name" {
@@ -29,8 +24,4 @@ output "storage_name" {
 
 output "azurerm_key_vault_name" {
   value = azurerm_key_vault.vault.name
-}
-
-output "azurerm_key_vault_id" {
-  value = azurerm_key_vault.vault.id
 }
