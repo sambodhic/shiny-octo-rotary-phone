@@ -29,18 +29,12 @@ resource "azurerm_resource_group" "kai-rg" {
 }
 
 resource "azurerm_container_registry" "kai-acr" {
-  name                = "kaidev"
+  name                = "kaiacr"
   resource_group_name = azurerm_resource_group.kai-rg.name
   location            = azurerm_resource_group.kai-rg.location
   sku                 = "Basic"
   admin_enabled       = true
 }
-
-output "admin_password" {
-  value     = azurerm_container_registry.kai-acr.admin_password
-  sensitive = true
-}
-
 
 # creating log analytics workspace
 resource "azurerm_log_analytics_workspace" "kai-law" {
@@ -88,15 +82,15 @@ resource "azapi_resource" "kai-app" {
         }
         registries = [
           {
-            server : "kaidev.azurecr.io"
-            username : "kaidev"
+            server : "kaiacr.azurecr.io"
+            username : "kaiacr"
             passwordSecretRef : "registry-password"
           }
         ]
         secrets = [
           {
             name : "registry-password"
-            value : "OleHvQ1F9Hgy9sgIRhnEnNZIp1KhhfGTvuamu/CgZ0+ACRAmL7kn"
+            value : azurerm_container_registry.kai-acr.admin_password
           }
         ]
       }
@@ -110,10 +104,10 @@ resource "azapi_resource" "kai-app" {
               memory = "0.5Gi"
             }
           },
-          # Only run it after kaidev.azurecr.io/app is deployed
+          # Only run it after kaiacr.azurecr.io/app is deployed
           # {
           #   name  = "app"
-          #   image = "kaidev.azurecr.io/app:latest"
+          #   image = "kaiacr.azurecr.io/app:latest"
           #   resources = {
           #     cpu    = 0.25
           #     memory = "0.5Gi"
