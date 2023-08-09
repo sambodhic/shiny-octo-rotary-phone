@@ -44,6 +44,14 @@ resource "azurerm_log_analytics_workspace" "law" {
   retention_in_days   = 30
 }
 
+resource "azurerm_application_insights" "kai-appinsights" {
+  name                = "kai-appinsights"
+  resource_group_name = azurerm_resource_group.kai-rg.name
+  location            = azurerm_resource_group.kai-rg.location
+  workspace_id        = azurerm_log_analytics_workspace.kai-law.id
+  application_type    = "web"
+}
+
 resource "azurerm_virtual_network" "vnet" {
   name                = "kaiVNet"
   resource_group_name = azurerm_resource_group.rg.name
@@ -116,6 +124,99 @@ resource "azurerm_public_ip" "pip" {
   sku                 = "Standard"
 }
 
+resource "azurerm_web_application_firewall_policy" "wafpolicy" {
+  name                = "kai-wafpolicy"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  custom_rules {
+    name      = "Rule1"
+    priority  = 1
+    rule_type = "MatchRule"
+
+    match_conditions {
+      match_variables {
+        variable_name = "RemoteAddr"
+      }
+
+      operator           = "IPMatch"
+      negation_condition = false
+      match_values       = ["192.168.1.0/24", "10.0.0.0/24"]
+    }
+
+    action = "Block"
+  }
+
+  custom_rules {
+    name      = "Rule2"
+    priority  = 2
+    rule_type = "MatchRule"
+
+    match_conditions {
+      match_variables {
+        variable_name = "RemoteAddr"
+      }
+
+      operator           = "IPMatch"
+      negation_condition = false
+      match_values       = ["192.168.1.0/24"]
+    }
+
+    match_conditions {
+      match_variables {
+        variable_name = "RequestHeaders"
+        selector      = "UserAgent"
+      }
+
+      operator           = "Contains"
+      negation_condition = false
+      match_values       = ["Windows"]
+    }
+
+    action = "Block"
+  }
+
+  policy_settings {
+    enabled                     = true
+    mode                        = "Prevention"
+    request_body_check          = true
+    file_upload_limit_in_mb     = 100
+    max_request_body_size_in_kb = 128
+  }
+
+  managed_rules {
+    exclusion {
+      match_variable          = "RequestHeaderNames"
+      selector                = "x-company-secret-header"
+      selector_match_operator = "Equals"
+    }
+    exclusion {
+      match_variable          = "RequestCookieNames"
+      selector                = "too-tasty"
+      selector_match_operator = "EndsWith"
+    }
+
+    managed_rule_set {
+      type    = "OWASP"
+      version = "3.2"
+      rule_group_override {
+        rule_group_name = "REQUEST-920-PROTOCOL-ENFORCEMENT"
+        rule {
+          id      = "920300"
+          enabled = true
+          action  = "Log"
+        }
+
+        rule {
+          id      = "920440"
+          enabled = true
+          action  = "Block"
+        }
+      }
+    }
+  }
+}
+
 resource "azurerm_application_gateway" "main" {
   name                = "kaiAppGateway"
   resource_group_name = azurerm_resource_group.rg.name
@@ -169,6 +270,8 @@ resource "azurerm_application_gateway" "main" {
     backend_http_settings_name = var.http_setting_name
     priority                   = 1
   }
+
+  firewall_policy_id = azurerm_web_application_firewall_policy.wafpolicy.id
 }
 
 resource "azurerm_network_interface" "nic" {
@@ -292,23 +395,23 @@ resource "azapi_resource" "app" {
       }
       template = {
         containers = [
-          {
-            name  = "web"
-            image = "nginx"
-            resources = {
-              cpu    = 0.25
-              memory = "0.5Gi"
-            }
-          },
-          # Only run it after kaidev.azurecr.io/app is deployed
           #   {
-          #     name  = "app"
-          #     image = "kaidev.azurecr.io/app:latest"
+          #     name  = "web"
+          #     image = "nginx"
           #     resources = {
           #       cpu    = 0.25
           #       memory = "0.5Gi"
           #     }
-          #   }
+          #   },
+          # Only run it after kaidev.azurecr.io/app is deployed
+          {
+            name  = "app"
+            image = "kaidev.azurecr.io/app:latest"
+            resources = {
+              cpu    = 0.25
+              memory = "0.5Gi"
+            }
+          }
         ]
         scale = {
           minReplicas = 1
@@ -368,6 +471,47 @@ resource "azurerm_batch_account" "batch" {
   location                            = azurerm_resource_group.rg.location
   storage_account_id                  = azurerm_storage_account.storage.id
   storage_account_authentication_mode = "StorageKeys"
+}
+
+resource "azurerm_monitor_workspace" "mamw" {
+  name                = "kai-mamw"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = "westus2"
+  tags = {
+    key = "value"
+  }
+}
+
+resource "azurerm_monitor_action_group" "main" {
+  name                = "kai-actiongroup"
+  resource_group_name = azurerm_resource_group.rg.name
+  short_name          = "p0action"
+
+  webhook_receiver {
+    name        = "callmyapi"
+    service_uri = "http://example.com/alert"
+  }
+}
+
+resource "azurerm_monitor_activity_log_alert" "main" {
+  name                = "kai-activitylogalert"
+  resource_group_name = azurerm_resource_group.rg.name
+  scopes              = [azurerm_resource_group.rg.id]
+  description         = "This alert will monitor a specific storage account updates."
+
+  criteria {
+    resource_id    = azurerm_storage_account.storage.id
+    operation_name = "Microsoft.Storage/storageAccounts/write"
+    category       = "Recommendation"
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+
+    webhook_properties = {
+      from = "terraform"
+    }
+  }
 }
 
 data "azurerm_client_config" "current" {}

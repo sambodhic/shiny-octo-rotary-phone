@@ -29,7 +29,7 @@ resource "azurerm_resource_group" "kai-rg" {
 }
 
 resource "azurerm_container_registry" "kai-acr" {
-  name                = "kaiacr"
+  name                = "kaidev"
   resource_group_name = azurerm_resource_group.kai-rg.name
   location            = azurerm_resource_group.kai-rg.location
   sku                 = "Basic"
@@ -43,6 +43,14 @@ resource "azurerm_log_analytics_workspace" "kai-law" {
   location            = azurerm_resource_group.kai-rg.location
   sku                 = "PerGB2018"
   retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "kai-appinsights" {
+  name                = "kai-appinsights"
+  resource_group_name = azurerm_resource_group.kai-rg.name
+  location            = azurerm_resource_group.kai-rg.location
+  workspace_id        = azurerm_log_analytics_workspace.kai-law.id
+  application_type    = "web"
 }
 
 # creating aca environment
@@ -82,8 +90,8 @@ resource "azapi_resource" "kai-app" {
         }
         registries = [
           {
-            server : "kaiacr.azurecr.io"
-            username : "kaiacr"
+            server : "kaidev.azurecr.io"
+            username : "kaidev"
             passwordSecretRef : "registry-password"
           }
         ]
@@ -104,10 +112,10 @@ resource "azapi_resource" "kai-app" {
               memory = "0.5Gi"
             }
           },
-          # Only run it after kaiacr.azurecr.io/app is deployed
+          # Only run it after kaidev.azurecr.io/app is deployed
           # {
           #   name  = "app"
-          #   image = "kaiacr.azurecr.io/app:latest"
+          #   image = "kaidev.azurecr.io/app:latest"
           #   resources = {
           #     cpu    = 0.25
           #     memory = "0.5Gi"
