@@ -223,8 +223,8 @@ resource "azurerm_application_gateway" "main" {
   location            = azurerm_resource_group.rg.location
 
   sku {
-    name     = "Standard_v2"
-    tier     = "Standard_v2"
+    name     = "WAF_v2"
+    tier     = "WAF_v2"
     capacity = 2
   }
 
