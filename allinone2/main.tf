@@ -1,6 +1,6 @@
 resource "azurerm_resource_group" "kai" {
   name     = "kai-resources"
-  location = "westus2"
+  location = "westus3"
 }
 
 resource "azurerm_container_registry" "acr" {
@@ -9,22 +9,6 @@ resource "azurerm_container_registry" "acr" {
   location            = azurerm_resource_group.kai.location
   sku                 = "Basic"
   admin_enabled       = true
-}
-
-resource "azurerm_log_analytics_workspace" "law" {
-  name                = "kaiLaw"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-}
-
-resource "azurerm_application_insights" "kai-appinsights" {
-  name                = "kai-appinsights"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  workspace_id        = azurerm_log_analytics_workspace.law.id
-  application_type    = "web"
 }
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/web_application_firewall_policy
@@ -335,15 +319,6 @@ resource "azurerm_batch_application" "kai" {
   account_name        = azurerm_batch_account.kai.name
 }
 
-resource "azurerm_monitor_workspace" "mamw" {
-  name                = "kai-mamw"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  tags = {
-    key = "value"
-  }
-}
-
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault
 data "azurerm_client_config" "current" {}
 
@@ -487,3 +462,59 @@ resource "azurerm_private_endpoint" "kaibe" {
   }
 }
 
+resource "azurerm_log_analytics_workspace" "law" {
+  name                = "kaiLaw"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "kai-appinsights" {
+  name                = "kai-appinsights"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  workspace_id        = azurerm_log_analytics_workspace.law.id
+  application_type    = "web"
+}
+
+resource "azurerm_monitor_workspace" "mamw" {
+  name                = "kai-mamw"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = "westus2"
+  tags = {
+    key = "value"
+  }
+}
+
+# resource "azurerm_monitor_action_group" "main" {
+#   name                = "kai-actiongroup"
+#   resource_group_name = azurerm_resource_group.kai.name
+#   short_name          = "p0action"
+
+#   webhook_receiver {
+#     name        = "callmyapi"
+#     service_uri = "http://example.com/alert"
+#   }
+# }
+
+# resource "azurerm_monitor_activity_log_alert" "main" {
+#   name                = "kai-activitylogalert"
+#   resource_group_name = azurerm_resource_group.kai.name
+#   scopes              = [azurerm_resource_group.kai.id]
+#   description         = "This alert will monitor a specific storage account updates."
+
+#   criteria {
+#     resource_id    = azurerm_storage_account.kai.id
+#     operation_name = "Microsoft.Storage/storageAccounts/write"
+#     category       = "Recommendation"
+#   }
+
+#   action {
+#     action_group_id = azurerm_monitor_action_group.main.id
+
+#     webhook_properties = {
+#       from = "terraform"
+#     }
+#   }
+# }
