@@ -1,6 +1,30 @@
 resource "azurerm_resource_group" "kai" {
   name     = "kai-resources"
-  location = "westus3"
+  location = "westus2"
+}
+
+resource "azurerm_container_registry" "acr" {
+  name                = "kaidev"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  sku                 = "Basic"
+  admin_enabled       = true
+}
+
+resource "azurerm_log_analytics_workspace" "law" {
+  name                = "kaiLaw"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "kai-appinsights" {
+  name                = "kai-appinsights"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  workspace_id        = azurerm_log_analytics_workspace.law.id
+  application_type    = "web"
 }
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/web_application_firewall_policy
@@ -115,7 +139,27 @@ resource "azurerm_subnet" "backend" {
   name                 = "backend"
   resource_group_name  = azurerm_resource_group.kai.name
   virtual_network_name = azurerm_virtual_network.kai.name
+  address_prefixes     = ["10.254.1.0/24"]
+}
+
+resource "azurerm_subnet" "database" {
+  name                 = "kaiDatabaseSubnet"
+  resource_group_name  = azurerm_resource_group.kai.name
+  virtual_network_name = azurerm_virtual_network.kai.name
   address_prefixes     = ["10.254.2.0/24"]
+  service_endpoints    = ["Microsoft.Storage"]
+
+  delegation {
+    name = "fs"
+
+    service_delegation {
+      name = "Microsoft.DBforPostgreSQL/flexibleServers"
+
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+      ]
+    }
+  }
 }
 
 resource "azurerm_public_ip" "kai" {
@@ -196,6 +240,78 @@ resource "azurerm_application_gateway" "network" {
   firewall_policy_id = azurerm_web_application_firewall_policy.kai.id
 }
 
+resource "azurerm_service_plan" "kai" {
+  name                = "kai"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  os_type             = "Linux"
+  sku_name            = "S1"
+  worker_count        = 3
+}
+
+resource "azurerm_linux_web_app" "kaifrontend" {
+  name                = "kaifrontend"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_service_plan.kai.location
+  service_plan_id     = azurerm_service_plan.kai.id
+
+  app_settings = {
+    "WEBSITES_ENABLE_APP_SERVICE_STORAGE" = "false"
+  }
+
+  site_config {
+    application_stack {
+      # docker_image_name   = "kaidev.azurecr.io/app:latest"
+      docker_image_name   = "nginx:latest"
+      docker_registry_url = "https://index.docker.io"
+    }
+  }
+}
+
+resource "azurerm_linux_web_app" "kaibackend" {
+  name                = "kaibackend"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_service_plan.kai.location
+  service_plan_id     = azurerm_service_plan.kai.id
+
+  site_config {
+    application_stack {
+      node_version = "18-lts"
+    }
+  }
+}
+
+resource "random_password" "pass" {
+  length = 20
+}
+
+# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_server.html
+resource "azurerm_postgresql_server" "kai" {
+  name                = "postgresql-server-kai"
+  location            = azurerm_resource_group.kai.location
+  resource_group_name = azurerm_resource_group.kai.name
+
+  sku_name = "GP_Gen5_2"
+
+  storage_mb                   = 5120
+  backup_retention_days        = 7
+  geo_redundant_backup_enabled = false
+  auto_grow_enabled            = true
+
+  administrator_login          = "psqladmin"
+  administrator_login_password = random_password.pass.result
+  version                      = "9.5"
+  ssl_enforcement_enabled      = true
+}
+
+resource "azurerm_postgresql_database" "kai" {
+  name                = "kaidb"
+  resource_group_name = azurerm_resource_group.kai.name
+  server_name         = azurerm_postgresql_server.kai.name
+  charset             = "UTF8"
+  collation           = "English_United States.1252"
+}
+
 resource "azurerm_storage_account" "kai" {
   name                     = "kaisa"
   resource_group_name      = azurerm_resource_group.kai.name
@@ -217,6 +333,15 @@ resource "azurerm_batch_application" "kai" {
   name                = "kai-batch-application"
   resource_group_name = azurerm_resource_group.kai.name
   account_name        = azurerm_batch_account.kai.name
+}
+
+resource "azurerm_monitor_workspace" "mamw" {
+  name                = "kai-mamw"
+  resource_group_name = azurerm_resource_group.kai.name
+  location            = azurerm_resource_group.kai.location
+  tags = {
+    key = "value"
+  }
 }
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/key_vault
@@ -319,3 +444,46 @@ resource "azurerm_private_endpoint" "kaikv" {
     is_manual_connection           = false
   }
 }
+
+resource "azurerm_private_endpoint" "kaidb" {
+  name                = "kai-db-endpoint"
+  location            = azurerm_resource_group.kai.location
+  resource_group_name = azurerm_resource_group.kai.name
+  subnet_id           = azurerm_subnet.backend.id
+
+  private_service_connection {
+    name                           = "kai-privateserviceconnection"
+    private_connection_resource_id = azurerm_postgresql_server.kai.id
+    subresource_names              = ["postgresqlServer"]
+    is_manual_connection           = false
+  }
+}
+
+resource "azurerm_private_endpoint" "kaife" {
+  name                = "kai-fe-endpoint"
+  location            = azurerm_resource_group.kai.location
+  resource_group_name = azurerm_resource_group.kai.name
+  subnet_id           = azurerm_subnet.backend.id
+
+  private_service_connection {
+    name                           = "kai-privateserviceconnection"
+    private_connection_resource_id = azurerm_linux_web_app.kaifrontend.id
+    subresource_names              = ["sites"]
+    is_manual_connection           = false
+  }
+}
+
+resource "azurerm_private_endpoint" "kaibe" {
+  name                = "kai-be-endpoint"
+  location            = azurerm_resource_group.kai.location
+  resource_group_name = azurerm_resource_group.kai.name
+  subnet_id           = azurerm_subnet.backend.id
+
+  private_service_connection {
+    name                           = "kai-privateserviceconnection"
+    private_connection_resource_id = azurerm_linux_web_app.kaibackend.id
+    subresource_names              = ["sites"]
+    is_manual_connection           = false
+  }
+}
+

@@ -48,7 +48,7 @@ resource "azurerm_application_insights" "kai-appinsights" {
   name                = "kai-appinsights"
   resource_group_name = azurerm_resource_group.kai-rg.name
   location            = azurerm_resource_group.kai-rg.location
-  workspace_id        = azurerm_log_analytics_workspace.kai-law.id
+  workspace_id        = azurerm_log_analytics_workspace.law.id
   application_type    = "web"
 }
 
