@@ -224,45 +224,11 @@ resource "azurerm_application_gateway" "network" {
   firewall_policy_id = azurerm_web_application_firewall_policy.kai.id
 }
 
-resource "azurerm_service_plan" "kai" {
-  name                = "kai"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  os_type             = "Linux"
-  sku_name            = "S1"
-  worker_count        = 3
-}
+module "azurerm_service_plan" {
+  source = "../modules/services/appserver-cluster"
 
-resource "azurerm_linux_web_app" "kaifrontend" {
-  name                = "kaifrontend"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_service_plan.kai.location
-  service_plan_id     = azurerm_service_plan.kai.id
-
-  app_settings = {
-    "WEBSITES_ENABLE_APP_SERVICE_STORAGE" = "false"
-  }
-
-  site_config {
-    application_stack {
-      # docker_image_name   = "kaidev.azurecr.io/app:latest"
-      docker_image_name   = "nginx:latest"
-      docker_registry_url = "https://index.docker.io"
-    }
-  }
-}
-
-resource "azurerm_linux_web_app" "kaibackend" {
-  name                = "kaibackend"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_service_plan.kai.location
-  service_plan_id     = azurerm_service_plan.kai.id
-
-  site_config {
-    application_stack {
-      node_version = "18-lts"
-    }
-  }
+  resource_group_name     = azurerm_resource_group.kai.name
+  resource_group_location = azurerm_resource_group.kai.location
 }
 
 module "azurerm_postgresql_server" {
@@ -351,7 +317,7 @@ resource "azurerm_private_endpoint" "kaife" {
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
-    private_connection_resource_id = azurerm_linux_web_app.kaifrontend.id
+    private_connection_resource_id = module.azurerm_service_plan.kaifrontend.id
     subresource_names              = ["sites"]
     is_manual_connection           = false
   }
@@ -365,7 +331,7 @@ resource "azurerm_private_endpoint" "kaibe" {
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
-    private_connection_resource_id = azurerm_linux_web_app.kaibackend.id
+    private_connection_resource_id = module.azurerm_service_plan.kaibackend.id
     subresource_names              = ["sites"]
     is_manual_connection           = false
   }
