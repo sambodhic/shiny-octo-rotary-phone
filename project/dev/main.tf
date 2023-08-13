@@ -148,27 +148,9 @@ resource "azurerm_private_endpoint" "kaibe" {
   }
 }
 
-resource "azurerm_log_analytics_workspace" "law" {
-  name                = "kaiLaw"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-}
+module "azurerm_monitor" {
+  source = "../modules/services/monitor"
 
-resource "azurerm_application_insights" "kai-appinsights" {
-  name                = "kai-appinsights"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  workspace_id        = azurerm_log_analytics_workspace.law.id
-  application_type    = "web"
-}
-
-resource "azurerm_monitor_workspace" "mamw" {
-  name                = "kai-mamw"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = "westus2"
-  tags = {
-    key = "value"
-  }
+  resource_group_name     = azurerm_resource_group.kai.name
+  resource_group_location = "westus2"
 }
