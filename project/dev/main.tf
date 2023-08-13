@@ -265,35 +265,11 @@ resource "azurerm_linux_web_app" "kaibackend" {
   }
 }
 
-resource "random_password" "pass" {
-  length = 20
-}
+module "azurerm_postgresql_server" {
+  source = "../dev/data-stores/postgresql"
 
-# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_server.html
-resource "azurerm_postgresql_server" "kai" {
-  name                = "postgresql-server-kai"
-  location            = azurerm_resource_group.kai.location
-  resource_group_name = azurerm_resource_group.kai.name
-
-  sku_name = "GP_Gen5_2"
-
-  storage_mb                   = 5120
-  backup_retention_days        = 7
-  geo_redundant_backup_enabled = false
-  auto_grow_enabled            = true
-
-  administrator_login          = "psqladmin"
-  administrator_login_password = random_password.pass.result
-  version                      = "9.5"
-  ssl_enforcement_enabled      = true
-}
-
-resource "azurerm_postgresql_database" "kai" {
-  name                = "kaidb"
-  resource_group_name = azurerm_resource_group.kai.name
-  server_name         = azurerm_postgresql_server.kai.name
-  charset             = "UTF8"
-  collation           = "English_United States.1252"
+  resource_group_name     = azurerm_resource_group.kai.name
+  resource_group_location = azurerm_resource_group.kai.location
 }
 
 module "azurerm_batch_application" {
@@ -361,7 +337,7 @@ resource "azurerm_private_endpoint" "kaidb" {
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
-    private_connection_resource_id = azurerm_postgresql_server.kai.id
+    private_connection_resource_id = module.azurerm_postgresql_server.kaidb.id
     subresource_names              = ["postgresqlServer"]
     is_manual_connection           = false
   }
