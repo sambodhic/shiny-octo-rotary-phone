@@ -11,6 +11,23 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled       = true
 }
 
+module "azurerm_virtual_network" {
+  source = "../modules/services/network"
+
+  resource_group_name     = azurerm_resource_group.kai.name
+  resource_group_location = azurerm_resource_group.kai.location
+}
+
+locals {
+  backend_address_pool_name      = "${module.azurerm_virtual_network.name}-beap"
+  frontend_port_name             = "${module.azurerm_virtual_network.name}-feport"
+  frontend_ip_configuration_name = "${module.azurerm_virtual_network.name}-feip"
+  http_setting_name              = "${module.azurerm_virtual_network.name}-be-htst"
+  listener_name                  = "${module.azurerm_virtual_network.name}-httplstn"
+  request_routing_rule_name      = "${module.azurerm_virtual_network.name}-rqrt"
+  redirect_configuration_name    = "${module.azurerm_virtual_network.name}-rdrcfg"
+}
+
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/web_application_firewall_policy
 resource "azurerm_web_application_firewall_policy" "kai" {
   name                = "kai-wafpolicy"
@@ -105,66 +122,6 @@ resource "azurerm_web_application_firewall_policy" "kai" {
   }
 }
 
-resource "azurerm_virtual_network" "kai" {
-  name                = "kai-network"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  address_space       = ["10.254.0.0/16"]
-}
-
-resource "azurerm_subnet" "frontend" {
-  name                 = "frontend"
-  resource_group_name  = azurerm_resource_group.kai.name
-  virtual_network_name = azurerm_virtual_network.kai.name
-  address_prefixes     = ["10.254.0.0/24"]
-}
-
-resource "azurerm_subnet" "backend" {
-  name                 = "backend"
-  resource_group_name  = azurerm_resource_group.kai.name
-  virtual_network_name = azurerm_virtual_network.kai.name
-  address_prefixes     = ["10.254.1.0/24"]
-}
-
-resource "azurerm_subnet" "database" {
-  name                 = "kaiDatabaseSubnet"
-  resource_group_name  = azurerm_resource_group.kai.name
-  virtual_network_name = azurerm_virtual_network.kai.name
-  address_prefixes     = ["10.254.2.0/24"]
-  service_endpoints    = ["Microsoft.Storage"]
-
-  delegation {
-    name = "fs"
-
-    service_delegation {
-      name = "Microsoft.DBforPostgreSQL/flexibleServers"
-
-      actions = [
-        "Microsoft.Network/virtualNetworks/subnets/join/action",
-      ]
-    }
-  }
-}
-
-resource "azurerm_public_ip" "kai" {
-  name                = "kai-pip"
-  resource_group_name = azurerm_resource_group.kai.name
-  location            = azurerm_resource_group.kai.location
-  allocation_method   = "Static"
-  sku                 = "Standard"
-}
-
-# since these variables are re-used - a locals block makes this more maintainable
-locals {
-  backend_address_pool_name      = "${azurerm_virtual_network.kai.name}-beap"
-  frontend_port_name             = "${azurerm_virtual_network.kai.name}-feport"
-  frontend_ip_configuration_name = "${azurerm_virtual_network.kai.name}-feip"
-  http_setting_name              = "${azurerm_virtual_network.kai.name}-be-htst"
-  listener_name                  = "${azurerm_virtual_network.kai.name}-httplstn"
-  request_routing_rule_name      = "${azurerm_virtual_network.kai.name}-rqrt"
-  redirect_configuration_name    = "${azurerm_virtual_network.kai.name}-rdrcfg"
-}
-
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/application_gateway.html
 resource "azurerm_application_gateway" "network" {
   name                = "kai-appgateway"
@@ -179,7 +136,7 @@ resource "azurerm_application_gateway" "network" {
 
   gateway_ip_configuration {
     name      = "my-gateway-ip-configuration"
-    subnet_id = azurerm_subnet.frontend.id
+    subnet_id = module.azurerm_virtual_network.frontend.id
   }
 
   frontend_port {
@@ -189,7 +146,7 @@ resource "azurerm_application_gateway" "network" {
 
   frontend_ip_configuration {
     name                 = local.frontend_ip_configuration_name
-    public_ip_address_id = azurerm_public_ip.kai.id
+    public_ip_address_id = module.azurerm_virtual_network.publicip.id
   }
 
   backend_address_pool {
@@ -257,7 +214,7 @@ resource "azurerm_private_endpoint" "kaisa" {
   name                = "kai-sa-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
@@ -271,7 +228,7 @@ resource "azurerm_private_endpoint" "kaiba" {
   name                = "kai-ba-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
@@ -285,7 +242,7 @@ resource "azurerm_private_endpoint" "kaikv" {
   name                = "kai-kv-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
@@ -299,7 +256,7 @@ resource "azurerm_private_endpoint" "kaidb" {
   name                = "kai-db-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
@@ -313,7 +270,7 @@ resource "azurerm_private_endpoint" "kaife" {
   name                = "kai-fe-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
@@ -327,7 +284,7 @@ resource "azurerm_private_endpoint" "kaibe" {
   name                = "kai-be-endpoint"
   location            = azurerm_resource_group.kai.location
   resource_group_name = azurerm_resource_group.kai.name
-  subnet_id           = azurerm_subnet.backend.id
+  subnet_id           = module.azurerm_virtual_network.backend.id
 
   private_service_connection {
     name                           = "kai-privateserviceconnection"
