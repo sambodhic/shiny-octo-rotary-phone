@@ -46,3 +46,26 @@ resource "azurerm_public_ip" "publicip" {
   allocation_method   = "Static"
   sku                 = "Standard"
 }
+
+resource "azurerm_network_security_group" "frontend" {
+  name                = "${var.resource_group_name}-fe-nsg"
+  resource_group_name = var.resource_group_name
+  location            = var.resource_group_location
+
+  security_rule {
+    name                       = "test123"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "frontend" {
+  subnet_id                 = azurerm_subnet.frontend.id
+  network_security_group_id = azurerm_network_security_group.frontend.id
+}
