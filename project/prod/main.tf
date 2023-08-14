@@ -43,7 +43,7 @@ module "azurerm_service_plan" {
 }
 
 module "azurerm_postgresql_server" {
-  source = "../dev/data-stores/postgresql"
+  source = "../prod/data-stores/postgresql"
 
   resource_group_name     = azurerm_resource_group.rg.name
   resource_group_location = azurerm_resource_group.rg.location
