@@ -1,26 +1,26 @@
 resource "azurerm_virtual_network" "kai" {
-  name                = "kai-network"
+  name                = "${var.resource_group_name}-network"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
   address_space       = ["10.254.0.0/16"]
 }
 
 resource "azurerm_subnet" "frontend" {
-  name                 = "frontend"
+  name                 = "${var.resource_group_name}frontend"
   resource_group_name = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.kai.name
   address_prefixes     = ["10.254.0.0/24"]
 }
 
 resource "azurerm_subnet" "backend" {
-  name                 = "backend"
+  name                 = "${var.resource_group_name}backend"
   resource_group_name = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.kai.name
   address_prefixes     = ["10.254.1.0/24"]
 }
 
 resource "azurerm_subnet" "database" {
-  name                 = "kaiDatabaseSubnet"
+  name                 = "${var.resource_group_name}DatabaseSubnet"
   resource_group_name = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.kai.name
   address_prefixes     = ["10.254.2.0/24"]
@@ -40,7 +40,7 @@ resource "azurerm_subnet" "database" {
 }
 
 resource "azurerm_public_ip" "publicip" {
-  name                = "kai-pip"
+  name                = "${var.resource_group_name}-pip"
   resource_group_name = var.resource_group_name
   location            = var.resource_group_location
   allocation_method   = "Static"

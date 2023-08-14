@@ -4,7 +4,7 @@ resource "random_password" "pass" {
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_server.html
 resource "azurerm_postgresql_server" "kaidb" {
-  name                = "postgresql-server-kai"
+  name                = "postgresql-server-${var.resource_group_name}"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
 
@@ -22,7 +22,7 @@ resource "azurerm_postgresql_server" "kaidb" {
 }
 
 resource "azurerm_postgresql_database" "kaidb" {
-  name                = "kaidb"
+  name                = "${var.resource_group_name}db"
   resource_group_name = var.resource_group_name
   server_name         = azurerm_postgresql_server.kaidb.name
   collation           = "English_United States.1252"

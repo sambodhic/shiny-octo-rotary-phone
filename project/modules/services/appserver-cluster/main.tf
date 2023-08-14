@@ -1,5 +1,5 @@
 resource "azurerm_service_plan" "kai" {
-  name                = "kai"
+  name                = "${var.resource_group_name}-app"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
   os_type             = "Linux"
@@ -8,7 +8,7 @@ resource "azurerm_service_plan" "kai" {
 }
 
 resource "azurerm_linux_web_app" "kaifrontend" {
-  name                = "kaifrontend"
+  name                = "${var.resource_group_name}frontend"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
   service_plan_id     = azurerm_service_plan.kai.id
@@ -27,7 +27,7 @@ resource "azurerm_linux_web_app" "kaifrontend" {
 }
 
 resource "azurerm_linux_web_app" "kaibackend" {
-  name                = "kaibackend"
+  name                = "${var.resource_group_name}backend"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
   service_plan_id     = azurerm_service_plan.kai.id

@@ -1,5 +1,13 @@
+resource "random_string" "azurerm_random_name" {
+  length  = 7
+  lower   = true
+  numeric = true
+  special = false
+  upper   = false
+}
+
 resource "azurerm_storage_account" "kaisa" {
-  name                     = "kaisa"
+  name                     = "${var.resource_group_name}sa${random_string.azurerm_random_name.result}"
   location                 = var.resource_group_location
   resource_group_name      = var.resource_group_name
   account_tier             = "Standard"
@@ -7,7 +15,7 @@ resource "azurerm_storage_account" "kaisa" {
 }
 
 resource "azurerm_batch_account" "kaiba" {
-  name                                = "kaiba"
+  name                                = "${var.resource_group_name}ba${random_string.azurerm_random_name.result}"
   location                            = var.resource_group_location
   resource_group_name                 = var.resource_group_name
   pool_allocation_mode                = "BatchService"
@@ -16,7 +24,7 @@ resource "azurerm_batch_account" "kaiba" {
 }
 
 resource "azurerm_batch_application" "kai" {
-  name                = "kai-batch-application"
+  name                = "${var.resource_group_name}-batch-application"
   resource_group_name = var.resource_group_name
   account_name        = azurerm_batch_account.kaiba.name
 }

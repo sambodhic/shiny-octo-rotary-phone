@@ -1,7 +1,7 @@
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/web_application_firewall_policy
 resource "azurerm_web_application_firewall_policy" "kai" {
-  name                = "kai-wafpolicy"
+  name                = "${var.resource_group_name}-wafpolicy"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
 
@@ -95,7 +95,7 @@ resource "azurerm_web_application_firewall_policy" "kai" {
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/application_gateway.html
 resource "azurerm_application_gateway" "network" {
-  name                = "kai-appgateway"
+  name                = "${var.resource_group_name}-appgateway"
   location            = var.resource_group_location
   resource_group_name = var.resource_group_name
 
